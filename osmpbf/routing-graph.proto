@@ -1,0 +1,7 @@
+message RoutingGraph {
+    optional uint32 nodes = 1;
+    repeated uint32 sources = 2 [packed=true];
+    repeated uint32 targets = 3 [packed=true];
+    repeated double costs = 4 [packed=true];
+    repeated bool added_by_ch = 5 [packed=true];
+}
