@@ -13,3 +13,4 @@ CMakeFiles/
 *.pb.h
 /osmpbf/libosmpbf.a
 cmake_install.cmake
+/examples/dumppbf
