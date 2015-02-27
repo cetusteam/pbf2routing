@@ -215,12 +215,7 @@ int main(int argc, char ** argv) {
         std::cerr << "Failed to write graph." << std::endl;
         return -1;
     }
-    //Read proto
-    std::fstream input("graph_i", std::ios::in | std::ios::binary);
-    if (!routingGraph.ParseFromIstream(&input)) {
-        std::cerr << "Failed to parse graph." << std::endl;
-        return -1;
-    }
+    
     std::cout<<"Nodes Size:: "<<nodesOut.nodes_size()<<std::endl;
     std::cout<<"Sources Size:: "<<routingGraph.sources_size()<<std::endl;
     std::cout<<"Targets Size:: "<<routingGraph.targets_size()<<std::endl;
