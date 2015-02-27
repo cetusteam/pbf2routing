@@ -74,20 +74,23 @@ double distance(double lat1, double lon1, double lat2,double lon2){
 void updateMaxMin(std::pair<double,double> *maxMinPair,double value){
     if(value > maxMinPair->first){
         maxMinPair->first = value;
-    } else if(value < maxMinPair->second ){
+    }
+    if(value < maxMinPair->second ){
         maxMinPair->second = value;
     }
 }
 
-int encode(std::pair<double,double> &maxMinPair,double value){
-    double offset = (maxMinPair.first - maxMinPair.second) / (2.0 * m);
+int encode(std::pair<double,double> &maxMinPair,double value,int32_t offset){
     int encoded  = round( ((value / m) - offset  ) / granularity);
     return encoded;
 }
 
+int32_t calc_offset(std::pair<double,double> &maxMinPair){
+    return round(maxMinPair.first - maxMinPair.second) / (2.0 * m);
+}
 
-double decode(std::pair<double,double> &maxMinPair,int value){
-    double offset = (maxMinPair.first - maxMinPair.second) / (2.0 * m);
+double decode(std::pair<double,double> &maxMinPair,int value,int32_t offset){
+    
     double decoded =  m * (offset + (granularity * static_cast<double>(value)));
     return decoded;
 }
@@ -228,22 +231,24 @@ int main(int argc, char ** argv) {
 #endif
     
     // Update the lat,lon
-    int nodesCount=0;
-    std::map<int64_t,std::pair<double,double>>::iterator itLatLon = mapLatLng.begin();
-    while(itLatLon != mapLatLng.end()){
+    uint32_t nodesCount=0;
+    int32_t offsetLat= calc_offset(maxMinLat);
+    int32_t offsetLng = calc_offset(maxMinLng);
+    
+    for (auto latLng : mapLatLng) {
+        auto id = latLng.first;
+        auto latLngPair = latLng.second;
+        auto lat = latLngPair.first;
+        auto lng = latLngPair.second;
         Node *nodeGraph = nodesOut.add_nodes();
-        nodeGraph->set_id(itLatLon->first);
+        nodeGraph->set_id(id);
+        nodeGraph->set_lng(encode(maxMinLng,lng,offsetLng));
+        nodeGraph->set_lat(encode(maxMinLat,lat,offsetLat));
         nodeGraph->set_new_id(nodesCount);
-        if(itLatLon != mapLatLng.end()){
-            nodeGraph->set_lng(encode(maxMinLng,itLatLon->second.second));
-            nodeGraph->set_lat(encode(maxMinLat,itLatLon->second.first));
-            
-            //
-            //std::cout<<""<<nodeGraph->lng()<<" "<<decode(maxMinLng, nodeGraph->lng())<<" vs "<<itLatLon->second.second<<std::endl;
-            //std::cout<<""<<nodeGraph->lat()<<" "<<decode(maxMinLat, nodeGraph->lat())<<" vs "<<itLatLon->second.first<<std::endl;
-        }
+        //
+        //std::cout<<""<<nodeGraph->lng()<<" "<<decode(maxMinLng, nodeGraph->lng(),offsetLng)<<" vs "<<lng<<std::endl;
+        //std::cout<<""<<nodeGraph->lat()<<" "<<decode(maxMinLat, nodeGraph->lat(),offsetLat)<<" vs "<<lat<<std::endl;
         nodesCount++;
-        itLatLon++;
     }
     
     /**
@@ -252,11 +257,14 @@ int main(int argc, char ** argv) {
     
     
     //Write nodes
+    
     std::fstream outputNodes("nodes", std::ios::out | std::ios::trunc | std::ios::binary);
     if (!nodesOut.SerializeToOstream(&outputNodes)) {
         std::cerr << "Failed to write graph." << std::endl;
         return -1;
     }
+    
+    
     
     //Write graph
     std::fstream output("graph", std::ios::out | std::ios::trunc | std::ios::binary);
@@ -266,9 +274,8 @@ int main(int argc, char ** argv) {
     }
     
     std::cout<<"O Nodes Size:: "<<nodesOut.nodes_size()<<std::endl;
-    
-    
     std::cout<<"Sources Size:: "<<routingGraph.sources_size()<<std::endl;
     std::cout<<"Targets Size:: "<<routingGraph.targets_size()<<std::endl;
+    
     return 0;
 }
