@@ -29,6 +29,8 @@
 #include <osmpbf/primitiveblockinputadaptor.h>
 #include <map>
 #include <fstream>
+#include <limits>
+
 #include "../osmpbf/graph-node.pb.h"
 #include "../osmpbf/routing-graph.pb.h"
 
@@ -38,8 +40,13 @@
 
 namespace bg = boost::geometry;
 
-static int nodesCount=0;
 static std::map<int64_t,std::pair<double,double>> mapLatLng;
+static std::pair<double,double>  maxMinLat;
+static std::pair<double,double>  maxMinLng;
+
+// To encode the lat,lon
+double m = 0.000000001;
+int granularity = 5000;
 
 inline std::string primitiveTypeToString(osmpbf::PrimitiveType t) {
     switch (t) {
@@ -64,7 +71,28 @@ double distance(double lat1, double lon1, double lat2,double lon2){
     return bg::distance(p1, p2, haversine);
 }
 
-void parseBlock(osmpbf::PrimitiveBlockInputAdaptor & pbi,RoutingGraph *routingGraph,Nodes *nodesOut) {
+void updateMaxMin(std::pair<double,double> *maxMinPair,double value){
+    if(value > maxMinPair->first){
+        maxMinPair->first = value;
+    } else if(value < maxMinPair->second ){
+        maxMinPair->second = value;
+    }
+}
+
+int encode(std::pair<double,double> &maxMinPair,double value){
+    double offset = (maxMinPair.first - maxMinPair.second) / (2.0 * m);
+    int encoded  = round( ((value / m) - offset  ) / granularity);
+    return encoded;
+}
+
+
+double decode(std::pair<double,double> &maxMinPair,int value){
+    double offset = (maxMinPair.first - maxMinPair.second) / (2.0 * m);
+    double decoded =  m * (offset + (granularity * static_cast<double>(value)));
+    return decoded;
+}
+
+void parseBlock(osmpbf::PrimitiveBlockInputAdaptor & pbi,RoutingGraph *routingGraph) {
     //using filters is straight forward
     osmpbf::MultiStringTagFilter * hwFilter = new osmpbf::MultiStringTagFilter("highway");
     hwFilter->setValues(std::set<std::string>({"path", "residential","service","unclassified","footway"}));
@@ -76,6 +104,9 @@ void parseBlock(osmpbf::PrimitiveBlockInputAdaptor & pbi,RoutingGraph *routingGr
     if (!andFilter.buildIdCache()) {
         // 		std::cout << "No matching elements in this block" << std::endl;
     }
+    auto maxMinLat = std::make_pair(std::numeric_limits<double>::min(),std::numeric_limits<double>::max());
+    auto maxMinLng = std::make_pair(std::numeric_limits<double>::min(),std::numeric_limits<double>::max());
+    
     for (osmpbf::INodeStream node = pbi.getNodeStream(); !node.isNull(); node.next()) {
         
         //to check if a primitive matches the filter use
@@ -88,12 +119,10 @@ void parseBlock(osmpbf::PrimitiveBlockInputAdaptor & pbi,RoutingGraph *routingGr
             // Node was already processed
             continue;
         }
-        Node *nodeGraph = nodesOut->add_nodes();
-        nodeGraph->set_lat(node.latd());
-        nodeGraph->set_lng(node.lond());
-        nodeGraph->set_id(node.id());
-        nodeGraph->set_new_id(nodesCount);
-        nodesCount++;
+        //
+        updateMaxMin(&maxMinLat,node.latd());
+        updateMaxMin(&maxMinLng,node.lond());
+        //
         auto latLon = std::make_pair(node.latd(),node.lond());
         mapLatLng.insert(std::pair<int64_t,std::pair<double,double>>(node.id(),latLon));
     }
@@ -139,9 +168,7 @@ void parseBlock(osmpbf::PrimitiveBlockInputAdaptor & pbi,RoutingGraph *routingGr
                 }
                 routingGraph->add_costs(cost);
                 routingGraph->add_added_by_ch(false);
-                //
-                //std::cout<<itLatLonPrev->second.first<<" "<<itLatLonPrev->second.second
-                //<<" "<<itLatLonCurrent->second.first<<" "<<itLatLonCurrent->second.second<<std::endl;
+                
             }
         }
         
@@ -187,7 +214,7 @@ int main(int argc, char ** argv) {
             if (pbi.isNull()) {
                 continue;
             }
-            parseBlock(pbi,routingGraph,nodesOut);
+            parseBlock(pbi,&routingGraph);
         }
     }
 #else
@@ -196,12 +223,34 @@ int main(int argc, char ** argv) {
         if (pbi.isNull()){
             continue;
         }
-        parseBlock(pbi,&routingGraph,&nodesOut);
+        parseBlock(pbi,&routingGraph);
     }
 #endif
+    
+    // Update the lat,lon
+    int nodesCount=0;
+    std::map<int64_t,std::pair<double,double>>::iterator itLatLon = mapLatLng.begin();
+    while(itLatLon != mapLatLng.end()){
+        Node *nodeGraph = nodesOut.add_nodes();
+        nodeGraph->set_id(itLatLon->first);
+        nodeGraph->set_new_id(nodesCount);
+        if(itLatLon != mapLatLng.end()){
+            nodeGraph->set_lng(encode(maxMinLng,itLatLon->second.second));
+            nodeGraph->set_lat(encode(maxMinLat,itLatLon->second.first));
+            
+            //
+            //std::cout<<""<<nodeGraph->lng()<<" "<<decode(maxMinLng, nodeGraph->lng())<<" vs "<<itLatLon->second.second<<std::endl;
+            //std::cout<<""<<nodeGraph->lat()<<" "<<decode(maxMinLat, nodeGraph->lat())<<" vs "<<itLatLon->second.first<<std::endl;
+        }
+        nodesCount++;
+        itLatLon++;
+    }
+    
     /**
      Writes the graph data
      */
+    
+    
     //Write nodes
     std::fstream outputNodes("nodes", std::ios::out | std::ios::trunc | std::ios::binary);
     if (!nodesOut.SerializeToOstream(&outputNodes)) {
@@ -216,7 +265,9 @@ int main(int argc, char ** argv) {
         return -1;
     }
     
-    std::cout<<"Nodes Size:: "<<nodesOut.nodes_size()<<std::endl;
+    std::cout<<"O Nodes Size:: "<<nodesOut.nodes_size()<<std::endl;
+    
+    
     std::cout<<"Sources Size:: "<<routingGraph.sources_size()<<std::endl;
     std::cout<<"Targets Size:: "<<routingGraph.targets_size()<<std::endl;
     return 0;

@@ -1,8 +1,8 @@
 message Node {
-    optional uint32 id = 1;
-    optional double lat = 2;
-    optional double lng = 3;
-    optional uint32 new_id = 4;
+    optional sint32 id = 1;
+    optional sint32 lat = 2;
+    optional sint32 lng = 3;
+    optional sint32 new_id = 4;
 }
 
 message Nodes {
