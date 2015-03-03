@@ -1,0 +1,7 @@
+message NodesGraph {
+    // Parallel arrays.
+    repeated sint32 id = 2 [packed=true];
+    repeated sint32 lats = 3 [packed=true];
+    repeated sint32 lngs = 4 [packed=true];
+    repeated sint32 new_ids = 5 [packed=true];
+}

@@ -60,6 +60,13 @@ add_executable(pbf2route pbf2route.cpp)
 add_dependencies(pbf2route osmpbf)
 target_link_libraries(pbf2route ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(pbf2route_openmp pbf2route.cpp)
+add_dependencies(pbf2route_openmp osmpbf)
+target_link_libraries(pbf2route_openmp ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+add_target_properties(pbf2route_openmp COMPILE_FLAGS "-fopenmp")
+add_target_properties(pbf2route_openmp LINK_FLAGS "-fopenmp")
+
+
 add_executable(pbf2route_parsehelpers pbf2route_parsehelpers.cpp)
 add_dependencies(pbf2route_parsehelpers osmpbf)
 target_link_libraries(pbf2route_parsehelpers ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

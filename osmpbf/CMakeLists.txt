@@ -41,7 +41,7 @@ else(CMAKE_CROSSCOMPILING)
 	find_package(Protobuf)
 endif(CMAKE_CROSSCOMPILING)
 
-PROTOBUF_GENERATE_CPP(PROTO_SOURCES PROTO_HEADERS osmblob.proto osmformat.proto graph-node.proto routing-graph.proto)
+PROTOBUF_GENERATE_CPP(PROTO_SOURCES PROTO_HEADERS osmblob.proto osmformat.proto graph-node.proto node-graph.proto routing-graph.proto)
 
 find_package(ZLIB REQUIRED)
 

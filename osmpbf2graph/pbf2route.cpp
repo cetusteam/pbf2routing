@@ -29,6 +29,7 @@
 #include <limits>
 
 #include "../osmpbf/graph-node.pb.h"
+#include "../osmpbf/node-graph.pb.h"
 #include "../osmpbf/routing-graph.pb.h"
 
 
@@ -213,7 +214,7 @@ int main(int argc, char ** argv) {
     uint32_t nodesCount=0;
     int32_t offsetLat= calc_offset(maxMinLat);
     int32_t offsetLng = calc_offset(maxMinLng);
-    
+    NodesGraph nodesGraph;
     for (auto latLng : mapLatLng) {
         auto id = latLng.first;
         auto latLngPair = latLng.second;
@@ -225,9 +226,15 @@ int main(int argc, char ** argv) {
         nodeGraph->set_lat(encode(maxMinLat,lat,offsetLat));
         nodeGraph->set_new_id(nodesCount);
         //
+        nodesGraph.add_id(id);
+        nodesGraph.add_lats(lat);
+        nodesGraph.add_lngs(lng);
+        nodesGraph.add_new_ids(nodesCount);
+        //
         //std::cout<<""<<nodeGraph->lng()<<" "<<decode(maxMinLng, nodeGraph->lng(),offsetLng)<<" vs "<<lng<<std::endl;
         //std::cout<<""<<nodeGraph->lat()<<" "<<decode(maxMinLat, nodeGraph->lat(),offsetLat)<<" vs "<<lat<<std::endl;
         nodesCount++;
+        
     }
     
     /**
@@ -236,11 +243,20 @@ int main(int argc, char ** argv) {
     
     
     //Write nodes
-    
+    {
     std::fstream outputNodes("nodes", std::ios::out | std::ios::trunc | std::ios::binary);
     if (!nodesOut.SerializeToOstream(&outputNodes)) {
         std::cerr << "Failed to write graph." << std::endl;
         return -1;
+    }
+    }
+    
+    {
+    std::fstream outputNodesG("nodes_G", std::ios::out | std::ios::trunc | std::ios::binary);
+    if (!nodesGraph.SerializeToOstream(&outputNodesG)) {
+        std::cerr << "Failed to write graph." << std::endl;
+        return -1;
+    }
     }
     
     
@@ -255,6 +271,8 @@ int main(int argc, char ** argv) {
     std::cout<<"Nodes Size:: "<<nodesOut.nodes_size()<<std::endl;
     std::cout<<"Sources Size:: "<<routingGraph.sources_size()<<std::endl;
     std::cout<<"Targets Size:: "<<routingGraph.targets_size()<<std::endl;
+    std::cout<<"lats Size:: "<<nodesGraph.lats_size()<<std::endl;
+    
     
     return 0;
 }
