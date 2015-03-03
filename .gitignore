@@ -14,3 +14,8 @@ CMakeFiles/
 /osmpbf/libosmpbf.a
 cmake_install.cmake
 /examples/dumppbf
+CMakeScripts/
+*.xcodeproj/
+*.build/
+*.a
+Debug/

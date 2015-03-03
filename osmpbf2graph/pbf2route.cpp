@@ -18,9 +18,6 @@
  <http://www.gnu.org/licenses/>.
  */
 #include <iostream>
-#if defined(__OPENMP)
-#include <omp.h>
-#endif
 #include <osmpbf/osmfile.h>
 #include <osmpbf/inode.h>
 #include <osmpbf/iway.h>
@@ -203,24 +200,7 @@ int main(int argc, char ** argv) {
     RoutingGraph routingGraph;
     Nodes nodesOut;
     
-#if defined(__OPENMP)
-    uint32_t readBlobCount = omp_get_num_procs();
-    bool processedFile = false;
-    while (!processedFile) {
-        std::vector<osmpbf::BlobDataBuffer> pbiBuffers = inFile.getNextBlocks(readBlobCount);
-        uint32_t pbiCount = pbiBuffers.size();
-        processedFile = (pbiCount < readBlobCount);
-#pragma omp parallel for
-        for(uint32_t i = 0; i < pbiCount; ++i) {
-            osmpbf::PrimitiveBlockInputAdaptor pbi(pbiBuffers[i].data, pbiBuffers[i].availableBytes);
-            pbiBuffers[i].clear();
-            if (pbi.isNull()) {
-                continue;
-            }
-            parseBlock(pbi,&routingGraph);
-        }
-    }
-#else
+
     osmpbf::PrimitiveBlockInputAdaptor pbi;
     while (inFile.parseNextBlock(pbi)) {
         if (pbi.isNull()){
@@ -228,8 +208,7 @@ int main(int argc, char ** argv) {
         }
         parseBlock(pbi,&routingGraph);
     }
-#endif
-    
+  
     // Update the lat,lon
     uint32_t nodesCount=0;
     int32_t offsetLat= calc_offset(maxMinLat);
@@ -273,7 +252,7 @@ int main(int argc, char ** argv) {
         return -1;
     }
     
-    std::cout<<"O Nodes Size:: "<<nodesOut.nodes_size()<<std::endl;
+    std::cout<<"Nodes Size:: "<<nodesOut.nodes_size()<<std::endl;
     std::cout<<"Sources Size:: "<<routingGraph.sources_size()<<std::endl;
     std::cout<<"Targets Size:: "<<routingGraph.targets_size()<<std::endl;
     
