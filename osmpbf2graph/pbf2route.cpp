@@ -28,7 +28,6 @@
 #include <fstream>
 #include <limits>
 
-#include "../osmpbf/graph-node.pb.h"
 #include "../osmpbf/node-graph.pb.h"
 #include "../osmpbf/routing-graph.pb.h"
 
@@ -159,13 +158,12 @@ void parseBlock(osmpbf::PrimitiveBlockInputAdaptor & pbi,RoutingGraph *routingGr
                 cost = distance(
                                 itLatLonPrev->second.first,itLatLonPrev->second.second,
                                 itLatLonCurrent->second.first, itLatLonCurrent->second.second);
-                //
                 routingGraph->add_sources(prevRef);
                 routingGraph->add_targets(currentRef);
                 if(oneWay == "yes"){
-                    //routingGraph->add_direction(RoutingGraph_DirectionType_FORWARD);
+                    routingGraph->add_direction(RoutingGraph_DirectionType_FORWARD);
                 }else{
-                    //routingGraph->add_direction(RoutingGraph_DirectionType_BOTH);
+                    routingGraph->add_direction(RoutingGraph_DirectionType_BOTH);
                 }
                 routingGraph->add_costs(cost);
                 routingGraph->add_added_by_ch(false);
@@ -199,9 +197,7 @@ int main(int argc, char ** argv) {
      */
     
     RoutingGraph routingGraph;
-    Nodes nodesOut;
     
-
     osmpbf::PrimitiveBlockInputAdaptor pbi;
     while (inFile.parseNextBlock(pbi)) {
         if (pbi.isNull()){
@@ -209,7 +205,7 @@ int main(int argc, char ** argv) {
         }
         parseBlock(pbi,&routingGraph);
     }
-  
+    
     // Update the lat,lon
     uint32_t nodesCount=0;
     int32_t offsetLat= calc_offset(maxMinLat);
@@ -220,15 +216,10 @@ int main(int argc, char ** argv) {
         auto latLngPair = latLng.second;
         auto lat = latLngPair.first;
         auto lng = latLngPair.second;
-        Node *nodeGraph = nodesOut.add_nodes();
-        nodeGraph->set_id(id);
-        nodeGraph->set_lng(encode(maxMinLng,lng,offsetLng));
-        nodeGraph->set_lat(encode(maxMinLat,lat,offsetLat));
-        nodeGraph->set_new_id(nodesCount);
         //
         nodesGraph.add_id(id);
-        nodesGraph.add_lats(lat);
-        nodesGraph.add_lngs(lng);
+        nodesGraph.add_lngs(encode(maxMinLng,lng,offsetLng));
+        nodesGraph.add_lats(encode(maxMinLat,lat,offsetLat));
         nodesGraph.add_new_ids(nodesCount);
         //
         //std::cout<<""<<nodeGraph->lng()<<" "<<decode(maxMinLng, nodeGraph->lng(),offsetLng)<<" vs "<<lng<<std::endl;
@@ -243,32 +234,19 @@ int main(int argc, char ** argv) {
     
     
     //Write nodes
-    {
-    std::fstream outputNodes("nodes", std::ios::out | std::ios::trunc | std::ios::binary);
-    if (!nodesOut.SerializeToOstream(&outputNodes)) {
-        std::cerr << "Failed to write graph." << std::endl;
-        return -1;
-    }
-    }
     
-    {
-    std::fstream outputNodesG("nodes_G", std::ios::out | std::ios::trunc | std::ios::binary);
+    std::fstream outputNodesG("nodes", std::ios::out | std::ios::trunc | std::ios::binary);
     if (!nodesGraph.SerializeToOstream(&outputNodesG)) {
         std::cerr << "Failed to write graph." << std::endl;
         return -1;
     }
-    }
-    
-    
     
     //Write graph
-    std::fstream output("graph", std::ios::out | std::ios::trunc | std::ios::binary);
+    std::fstream output("edges", std::ios::out | std::ios::trunc | std::ios::binary);
     if (!routingGraph.SerializeToOstream(&output)) {
         std::cerr << "Failed to write graph." << std::endl;
         return -1;
     }
-    
-    std::cout<<"Nodes Size:: "<<nodesOut.nodes_size()<<std::endl;
     std::cout<<"Sources Size:: "<<routingGraph.sources_size()<<std::endl;
     std::cout<<"Targets Size:: "<<routingGraph.targets_size()<<std::endl;
     std::cout<<"lats Size:: "<<nodesGraph.lats_size()<<std::endl;
