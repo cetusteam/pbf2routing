@@ -30,7 +30,6 @@
 #include <limits>
 
 #include "../osmpbf/node-graph.pb.h"
-#include "../osmpbf/routing-graph.pb.h"
 
 #include <boost/geometry/core/cs.hpp>
 #include <boost/geometry.hpp>
@@ -42,7 +41,7 @@ using namespace std;
 
 // Converts the cost from a double to an integer.
 static uint32_t encode_cost(double cost) {
-    return cost;
+    return cost * 10.;
 }
 
 class MinMax {
@@ -98,6 +97,11 @@ public:
         return bg::distance(static_cast<const degree_point&>(*this),
                             static_cast<const degree_point&>(other)) * EARTH_RADIUS;
     }
+};
+
+struct RoutingWay {
+    bool one_way;
+    vector<int64_t> nodes;
 };
 
 class RoutingGraphGenerator {
@@ -199,92 +203,93 @@ static bool is_highway(const osmpbf::IWayStream& way) {
 }
 
 template<typename Func>
-static void for_each_node(osmpbf::OSMFileIn* in, Func fun ) {
+static void iterate_file(osmpbf::OSMFileIn* in, Func fun) {
     in->reset();
-    osmpbf::PrimitiveBlockInputAdaptor pbi;
+}
+
+void read_file(osmpbf::OSMFileIn* in,
+               unordered_map<int64_t,RoutingNode>* all_nodes,
+               unordered_map<int64_t,RoutingWay>* all_ways)
+{
+    using namespace osmpbf;
+    cerr << "FIRST STEP started: read nodes and ways from file" << endl;
+
+    PrimitiveBlockInputAdaptor pbi;
     while (in->parseNextBlock(pbi)) {
         for (osmpbf::INodeStream node = pbi.getNodeStream(); !node.isNull(); node.next()) {
-            fun(node);
+            all_nodes->insert({node.id(), RoutingNode(-1, node.lond(), node.latd())});
         }
-    }
-}
-
-template<typename Func>
-static void for_each_way(osmpbf::OSMFileIn* in, Func fun ) {
-    in->reset();
-    osmpbf::PrimitiveBlockInputAdaptor pbi;
-    while (in->parseNextBlock(pbi)) {
         for (osmpbf::IWayStream way = pbi.getWayStream(); !way.isNull(); way.next()) {
-            fun(way);
+            if (!is_highway(way)) {
+                // cerr << "Skipping way because it's not a highway " << way.id() << endl;
+                continue;
+            }
+            vector<int64_t> v;
+            for(RefIterator refIt = way.refBegin(); refIt != way.refEnd(); ++refIt) {
+                v.push_back(*refIt);
+            }
+            bool one_way = "yes" == way.valueByKey("oneway");
+            all_ways->insert({way.id(), {one_way, v}});
         }
     }
+
+    cerr << "FIRST STEP finished: all_nodes:" << all_nodes->size()
+         << " all_ways:" << all_ways->size() << endl;
 }
 
-void first_step(osmpbf::OSMFileIn* in, unordered_set<int64_t>* existing_nodes) {
-    using namespace osmpbf;
-    cerr << "FIRST STEP started: enumerate existing nodes" << endl;
-    for_each_node(in, [&](const INodeStream& node) {
-        existing_nodes->insert(node.id());
-    });
-    cerr << "FIRST STEP finished: existing_nodes: " << existing_nodes->size() << endl;
-}
-
-void second_step(osmpbf::OSMFileIn* in,
-                 const unordered_set<int64_t>& existing_nodes,
-                 unordered_set<int64_t>* valid_ways,
-                 unordered_set<int64_t>* nodes_used)
+void enumerate_valid_ways(const unordered_map<int64_t,RoutingNode>& all_nodes,
+                          const unordered_map<int64_t,RoutingWay>& all_ways,
+                          unordered_set<int64_t>* valid_ways,
+                          unordered_set<int64_t>* nodes_used)
 {
     using namespace osmpbf;
     cerr << "SECOND STEP started: enumerate valid ways" << endl;
-    for_each_way(in, [&](const IWayStream& way) {
-        if (!is_highway(way)) {
-            // cerr << "Skipping way because it's not a highway " << way.id() << endl;
-            return;
-        }
-
-        // check that all nodes exist
-        for(RefIterator refIt = way.refBegin(); refIt != way.refEnd(); ++refIt) {
-            int64_t nodeId = *refIt;
-            if (existing_nodes.count(nodeId) == 0) {
-                cerr << "WARNING: Invalid way: " << way.id() << endl;
+    for (const auto& waykv : all_ways) {
+        int64_t way_id = waykv.first;
+        bool valid_way = true;
+        const vector<int64_t>& v = waykv.second.nodes;
+        for (const auto& node_id : v) {
+            if (all_nodes.count(node_id) == 0) {
+                cerr << "WARNING: Invalid way: " << way_id << endl;
+                valid_way = false;
                 break;
             }
         }
 
-        valid_ways->insert(way.id());
-        for(RefIterator refIt = way.refBegin(); refIt != way.refEnd(); ++refIt) {
-            int64_t nodeId = *refIt;
-            nodes_used->insert(nodeId);
+        if (!valid_way) {
+            break;
         }
-    });
+
+        valid_ways->insert(way_id);
+        for (const auto& node_id : v) {
+            nodes_used->insert(node_id);
+        }
+    }
     cerr << "SECOND STEP finished: valid_ways: " << valid_ways->size()
          << " nodes_used:" << nodes_used->size()
          << endl;
 }
 
-void third_step(const unordered_set<int64_t>& nodes_used,
-                osmpbf::OSMFileIn* in,
-                NodeMapper* nodeMapper,
-                MinMax* lonMinMax,
-                MinMax* latMinMax)
+void feed_node_mapper(const unordered_map<int64_t,RoutingNode>& all_nodes,
+                      const unordered_set<int64_t>& nodes_used,
+                      NodeMapper* nodeMapper,
+                      MinMax* lonMinMax,
+                      MinMax* latMinMax)
 {
     using namespace osmpbf;
     cerr << "THIRD STEP started: retrieve detailed information about important nodes" << endl;
-    for_each_node(in, [&](const INodeStream& node) {
-        if (nodes_used.count(node.id()) == 0) {
-            return;
-        }
-        latMinMax->feed(node.latd());
-        lonMinMax->feed(node.lond());
-        // insert the map: nodeId -> {lat,lon}
-        nodeMapper->insert(node.id(), node.lond(), node.latd());
-    });
+    for (const auto& node_id : nodes_used) {
+        const RoutingNode& node = all_nodes.at(node_id);
+        latMinMax->feed(node.lat());
+        lonMinMax->feed(node.lon());
+        nodeMapper->insert(node_id, node.lon(), node.lat());
+    }
 }
 
-void fourth_step(const string& ddsg_fn,
+void generate_ddsg(const string& ddsg_fn,
+                 const unordered_map<int64_t,RoutingWay>& all_ways,
                  const unordered_set<int64_t>& valid_ways,
-                 const NodeMapper& node_mapper,
-                 osmpbf::OSMFileIn* in) {
+                 const NodeMapper& node_mapper) {
     using namespace osmpbf;
     cerr << "FOURTH STEP: create the ddsg graph" << endl;
 
@@ -295,29 +300,21 @@ void fourth_step(const string& ddsg_fn,
     }
 
     RoutingGraphGenerator graphGenerator(ddsg);
-    for_each_way(in, [&](const IWayStream& way) {
-        if (valid_ways.count(way.id()) == 0) {
-            return;
+    for (const auto& waykv : all_ways) {
+        int64_t way_id = waykv.first;
+        if (valid_ways.count(way_id) == 0) {
+            continue;
         }
-
-        bool oneWay = "yes" == way.valueByKey("oneway");
-
-        osmpbf::RefIterator refIt = way.refBegin();
-        int64_t currId = *refIt;
-        int64_t prevId;
-
-        for(++refIt; refIt != way.refEnd(); ++refIt) {
-            // jump to the next pair
-            prevId = currId;
-            currId = *refIt;
-
-            const RoutingNode& p1 = node_mapper.get(prevId);
-            const RoutingNode& p2 = node_mapper.get(currId);
+        const RoutingWay& routing_way = waykv.second;
+        const vector<int64_t>& way_nodes = routing_way.nodes;
+        for (int i=1; i < way_nodes.size(); ++i) {
+            const RoutingNode& p1 = node_mapper.get(way_nodes[i-1]);
+            const RoutingNode& p2 = node_mapper.get(way_nodes[i]);
             double cost = p1.distance(p2);
 
-            graphGenerator.insert(p1, p2, cost, oneWay);
+            graphGenerator.insert(p1, p2, cost, routing_way.one_way);
         }
-    });
+    }
     graphGenerator.finish(node_mapper.nodes_count());
 
     cerr << "FOURTH STEP finished: Total edges:" << graphGenerator.edges() << endl;
@@ -341,20 +338,19 @@ int main(int argc, char ** argv) {
         return -1;
     }
 
-    unordered_set<int64_t> existing_nodes;
-    first_step(&in, &existing_nodes);
-
+    unordered_map<int64_t,RoutingNode> all_nodes;
+    unordered_map<int64_t,RoutingWay> all_ways;
     unordered_set<int64_t> valid_ways, nodes_used;
-    second_step(&in, existing_nodes, &valid_ways, &nodes_used);
-    existing_nodes.clear();
+
+    read_file(&in, &all_nodes, &all_ways);
+
+    enumerate_valid_ways(all_nodes, all_ways, &valid_ways, &nodes_used);
 
     NodeMapper node_mapper;
     MinMax latMinMax, lonMinMax;
-    third_step(nodes_used, &in, &node_mapper, &lonMinMax, &latMinMax);
-    nodes_used.clear();
+    feed_node_mapper(all_nodes, nodes_used, &node_mapper, &lonMinMax, &latMinMax);
 
-    fourth_step(ddsg_fn, valid_ways, node_mapper, &in);
-    valid_ways.clear();
+    generate_ddsg(ddsg_fn, all_ways, valid_ways, node_mapper);
 
     // Generate the nodes structure
     lonMinMax.calc_offset();
