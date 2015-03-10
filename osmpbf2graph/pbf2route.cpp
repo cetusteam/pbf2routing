@@ -287,9 +287,10 @@ void feed_node_mapper(const unordered_map<int64_t,RoutingNode>& all_nodes,
 }
 
 void generate_ddsg(const string& ddsg_fn,
-                 const unordered_map<int64_t,RoutingWay>& all_ways,
-                 const unordered_set<int64_t>& valid_ways,
-                 const NodeMapper& node_mapper) {
+                   const unordered_map<int64_t,RoutingWay>& all_ways,
+                   const unordered_set<int64_t>& valid_ways,
+                   const NodeMapper& node_mapper)
+{
     using namespace osmpbf;
     cerr << "FOURTH STEP: create the ddsg graph" << endl;
 
