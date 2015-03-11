@@ -51,10 +51,10 @@ include_directories(
 	${ZLIB_INCLUDE_DIRS}
 	${CMAKE_CURRENT_BINARY_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}
-	${CMAKE_SOURCE_DIR}
+	${CMAKE_BINARY_DIR}
 )
 
-set(OSMPBF_LIBRARIES osmpbf)
+set(OSMPBF_LIBRARIES osmpbf protos-ch)
 
 add_executable(pbf2route pbf2route.cpp)
 add_dependencies(pbf2route osmpbf)

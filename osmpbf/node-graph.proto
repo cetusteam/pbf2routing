@@ -1,9 +1,0 @@
-message NodesGraph {
-    optional sint32 lon_offset = 1;
-    optional sint32 lat_offset = 2;
-    // Parallel arrays.
-    // repeated uint64 old_id = 2 [packed=true];
-    repeated int32  ids  = 3 [packed=true];
-    repeated sint32 lats = 4 [packed=true];
-    repeated sint32 lons = 5 [packed=true];
-}
