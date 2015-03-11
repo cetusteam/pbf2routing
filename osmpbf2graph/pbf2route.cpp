@@ -29,7 +29,7 @@
 #include <fstream>
 #include <limits>
 
-#include "../osmpbf/node-graph.pb.h"
+#include "protos/ch/node-graph.pb.h"
 
 #include <boost/geometry/core/cs.hpp>
 #include <boost/geometry.hpp>
@@ -357,13 +357,13 @@ int main(int argc, char ** argv) {
     lonMinMax.calc_offset();
     latMinMax.calc_offset();
 
-    NodesGraph nodesGraph;
+    protos::ch::NodesGraph nodesGraph;
     nodesGraph.set_lon_offset(lonMinMax.offset());
     nodesGraph.set_lat_offset(latMinMax.offset());
     for (const auto& it : node_mapper) {
         const RoutingNode& routingNode = it.second;
-
-        nodesGraph.add_ids(routingNode.mapped_id());
+        nodesGraph.add_old_ids(it.first);
+        nodesGraph.add_new_ids(routingNode.mapped_id());
         nodesGraph.add_lons(lonMinMax.encode(routingNode.lon()));
         nodesGraph.add_lats(latMinMax.encode(routingNode.lat()));
 
