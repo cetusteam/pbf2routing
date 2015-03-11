@@ -1,5 +1,5 @@
-osmpbf && osmpbf2graph
-======================
+osmpbf && pbf2routing
+=====================
 
 This is a simple C++ library to parse OpenStreetMap's PBF files and generate
 a ddsg file.
@@ -7,7 +7,7 @@ a ddsg file.
 How to compile and run this version:
 
     mkdir build
-    cmake -G Xcode ..
+    cmake ..   # alternatively you can use cmake -G Xcode ..
     make
     cd ..
     sh run.sh
