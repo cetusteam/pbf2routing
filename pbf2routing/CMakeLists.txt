@@ -18,25 +18,11 @@
 
 cmake_minimum_required(VERSION 3.1)
 
-project(osmpbf2route)
-
-MACRO(ADD_TARGET_PROPERTIES _target _name)
-	SET(_properties)
-	FOREACH(_prop ${ARGN})
-		SET(_properties "${_properties} ${_prop}")
-	ENDFOREACH(_prop)
-	GET_TARGET_PROPERTY(_old_properties ${_target} ${_name})
-	#MESSAGE(STATUS "adding property to ${_target} ${_name}:" ${_properties})
-	IF(NOT _old_properties)
-		# in case it's NOTFOUND
-		SET(_old_properties)
-	ENDIF(NOT _old_properties)
-	SET_TARGET_PROPERTIES(${_target} PROPERTIES ${_name} "${_old_properties} ${_properties}")
-ENDMACRO(ADD_TARGET_PROPERTIES)
+project(pbf2routing)
 
 set(DEBUG_FLAGS " ${DEBUG_FLAGS} -Wall")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++0x")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${DEBUG_FLAGS}")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} ${DEBUG_FLAGS}")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${DEBUG_FLAGS}")
@@ -56,6 +42,6 @@ include_directories(
 
 set(OSMPBF_LIBRARIES osmpbf protos-ch)
 
-add_executable(pbf2route pbf2route.cpp)
-add_dependencies(pbf2route osmpbf)
-target_link_libraries(pbf2route ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+add_executable(${PROJECT_NAME} pbf2routing.cpp)
+add_dependencies(${PROJECT_NAME} osmpbf)
+target_link_libraries(${PROJECT_NAME} ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

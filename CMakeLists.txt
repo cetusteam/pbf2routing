@@ -31,4 +31,4 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/osmp
 
 add_subdirectory(protos/ch)
 add_subdirectory(osmpbf)
-add_subdirectory(osmpbf2graph)
+add_subdirectory(pbf2routing)
