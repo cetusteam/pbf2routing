@@ -16,7 +16,7 @@
 #   License along with this library; if not, see
 #   <http://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.1)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 
 project(osmpbf-suite)
@@ -30,6 +30,6 @@ endif(CMAKE_CROSSCOMPILING AND ANDROID)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/osmpbf/include)
 
 add_subdirectory(osmpbf)
+add_subdirectory(osmpbf2graph)
 
-add_subdirectory(examples EXCLUDE_FROM_ALL)
 

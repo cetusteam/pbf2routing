@@ -16,9 +16,9 @@
 #   License along with this library; if not, see
 #   <http://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.1)
 
-project(osmpbf_examples)
+project(osmpbf2route)
 
 MACRO(ADD_TARGET_PROPERTIES _target _name)
 	SET(_properties)
@@ -54,24 +54,8 @@ include_directories(
 	${CMAKE_SOURCE_DIR}
 )
 
-set(OSMPBF_LIBRARIES ${osmpbf_BINARY_DIR}/libosmpbf.a)
+set(OSMPBF_LIBRARIES osmpbf)
 
-add_executable(dumppbf dumppbf.cpp)
-add_dependencies(dumppbf osmpbf)
-target_link_libraries(dumppbf ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-
-add_executable(dumppbf_openmp dumppbf.cpp)
-add_dependencies(dumppbf_openmp osmpbf)
-target_link_libraries(dumppbf_openmp ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-add_target_properties(dumppbf_openmp COMPILE_FLAGS "-fopenmp")
-add_target_properties(dumppbf_openmp LINK_FLAGS "-fopenmp")
-
-add_executable(dumppbf_parsehelpers dumppbf_parsehelpers.cpp)
-add_dependencies(dumppbf_parsehelpers osmpbf)
-target_link_libraries(dumppbf_parsehelpers ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-add_target_properties(dumppbf_parsehelpers COMPILE_FLAGS "-fopenmp")
-add_target_properties(dumppbf_parsehelpers LINK_FLAGS "-fopenmp")
-
-add_executable(osmpbf_dump osmpbf_dump.cpp)
-add_dependencies(osmpbf_dump osmpbf)
-target_link_libraries(osmpbf_dump ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+add_executable(pbf2route pbf2route.cpp)
+add_dependencies(pbf2route osmpbf)
+target_link_libraries(pbf2route ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

@@ -16,7 +16,7 @@
 #   License along with this library; if not, see
 #   <http://www.gnu.org/licenses/>.
 
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.1)
 
 project(osmpbf)
 
@@ -41,7 +41,7 @@ else(CMAKE_CROSSCOMPILING)
 	find_package(Protobuf)
 endif(CMAKE_CROSSCOMPILING)
 
-PROTOBUF_GENERATE_CPP(PROTO_SOURCES PROTO_HEADERS osmblob.proto osmformat.proto graph-node.proto routing-graph.proto)
+PROTOBUF_GENERATE_CPP(PROTO_SOURCES PROTO_HEADERS osmblob.proto osmformat.proto node-graph.proto)
 
 find_package(ZLIB REQUIRED)
 
