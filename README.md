@@ -6,7 +6,10 @@ a ddsg file.
 
 How to compile and run this version:
 
+    git submodule init
+    git submodule update
     mkdir build
+    cd build
     cmake ..   # alternatively you can use cmake -G Xcode ..
     make
     cd ..
