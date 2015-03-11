@@ -29,7 +29,6 @@ endif(CMAKE_CROSSCOMPILING AND ANDROID)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/osmpbf/include)
 
+add_subdirectory(protos/ch)
 add_subdirectory(osmpbf)
 add_subdirectory(pbf2routing)
-
-
