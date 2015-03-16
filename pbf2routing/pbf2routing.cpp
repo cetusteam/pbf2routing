@@ -46,8 +46,10 @@ static uint32_t encode_cost(double cost) {
 
 class MinMax {
     const double m = 0.000000001;
-const int granularity = 5000;
-    double _min, _max;
+    const int granularity = 1000;
+    const int m_by_g = m * granularity;
+    double _min = numeric_limits<double>::infinity();
+    double _max = -numeric_limits<double>::infinity();
     int32_t _offset;
 public:
     void feed(double v) {
@@ -60,18 +62,20 @@ public:
     }
     double min() const { return _min; }
     double max() const { return _max; }
-    int encode(double value) {
-        int encoded  = round( ((value / m) - _offset) / granularity);
+    int encode(double value) const {
+        int encoded  = round(value / m_by_g - _offset);
         return encoded;
     }
-    double decode(int value) {
-        double decoded =  m * (_offset + (granularity * static_cast<double>(value)));
+    double decode(int value) const {
+        double decoded =  m * (granularity * (_offset + static_cast<double>(value)));
         return decoded;
     }
     void calc_offset() {
-        _offset = round((max() - min()) / (2.0 * m));
+        _offset = round((min() + max()) / (2.0 * m_by_g));
+        cerr << "Calculating offset. min:" << _min
+             << " max:" << _max << " offset:" << _offset << endl;
     }
-    int32_t offset() {
+    int32_t offset() const {
         return _offset;
     }
 };
