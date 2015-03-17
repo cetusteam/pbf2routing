@@ -44,4 +44,9 @@ set(OSMPBF_LIBRARIES osmpbf protos-ch)
 
 add_executable(${PROJECT_NAME} pbf2routing.cpp)
 add_dependencies(${PROJECT_NAME} osmpbf)
-target_link_libraries(${PROJECT_NAME} ${OSMPBF_LIBRARIES} ${ZLIB_LIBRARIES} ${PROTOBUF_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(${PROJECT_NAME}
+	sqlite3
+	${OSMPBF_LIBRARIES}
+	${ZLIB_LIBRARIES}
+	${PROTOBUF_LIBRARIES}
+	${CMAKE_THREAD_LIBS_INIT})
