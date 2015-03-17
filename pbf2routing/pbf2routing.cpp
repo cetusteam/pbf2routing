@@ -28,9 +28,7 @@
 #include <unordered_set>
 #include <fstream>
 #include <limits>
-
-#include "protos/ch/node-graph.pb.h"
-
+#include <sqlite3.h>
 #include <boost/geometry/core/cs.hpp>
 #include <boost/geometry.hpp>
 
@@ -39,15 +37,79 @@ typedef bg::cs::spherical_equatorial<bg::degree> coord_system_t;
 typedef bg::model::point<double, 2, coord_system_t> degree_point;
 using namespace std;
 
+const double m = 0.000000001;
+const double granularity = 1000;
+const double m_by_g = m * granularity;
+
 // Converts the cost from a double to an integer.
 static uint32_t encode_cost(double cost) {
     return cost * 10.;
 }
 
+class StatusUpdater {
+    uint32_t count, last_count;
+    uint32_t total;
+    clock_t start_time;
+    clock_t last_time;
+    string msg;
+    string eol;
+public:
+    StatusUpdater() {
+        if (isatty(fileno(stdout))) {
+            // the output is a terminal. use interactive mode
+            eol = "           \r";
+        } else {
+            // output is a file or pile. use simple mode.
+            eol = "\n";
+        }
+    }
+    void start(const string& msg, uint32_t total) {
+        this->msg = msg;
+        this->total = total;
+        count = last_count = 0;
+        start_time = last_time = clock();
+        cerr << msg << ": starting" << eol << flush;
+    }
+
+    void absolute(uint32_t value) {
+        count = value;
+        print_message();
+    }
+
+    void progress(uint32_t increment=1) {
+        count += increment;
+        print_message();
+    }
+
+    void print_message() {
+        clock_t end = clock();
+        if ((end - last_time) < CLOCKS_PER_SEC) {
+            return;
+        }
+        double tot_time = double(end - last_time) / CLOCKS_PER_SEC;
+        double ops_per_sec = double(count - last_count) / tot_time;
+        uint32_t eta = (total - count) / ops_per_sec;
+        cerr << msg << ": " << count << "/" << total
+        << "  ops/sec:" << ops_per_sec
+        << " ETA:" << eta << eol << flush;
+        last_time = end;
+        last_count = count;
+    }
+
+    void finish() {
+        clock_t end = clock();
+        double tot_time = double(end - start_time) / CLOCKS_PER_SEC;
+        double ops_per_sec = double(count) / tot_time;
+        cerr << msg << ": finished. ops/sec:" << ops_per_sec
+        << " time(s):" << tot_time << eol << flush;
+        if (isatty(fileno(stdout))) {
+            // in a terminal we need a read \n
+            cerr << endl;
+        }
+    }
+};
+
 class MinMax {
-    const double m = 0.000000001;
-    const int granularity = 1000;
-    const int m_by_g = m * granularity;
     double _min = numeric_limits<double>::infinity();
     double _max = -numeric_limits<double>::infinity();
     int32_t _offset;
@@ -184,19 +246,6 @@ private:
     map_type_t nodeIdMapper;
 };
 
-inline string primitiveTypeToString(osmpbf::PrimitiveType t) {
-    switch (t) {
-        case osmpbf::PrimitiveType::NodePrimitive:
-            return "node";
-        case osmpbf::PrimitiveType::WayPrimitive:
-            return "way";
-        case osmpbf::PrimitiveType::RelationPrimitive:
-            return "relation";
-        default:
-            return "invalid";
-    };
-}
-
 static bool is_highway(const osmpbf::IWayStream& way) {
     for (int i=0; i < way.tagsSize(); ++i) {
         if ("highway" == way.key(i)){
@@ -216,10 +265,12 @@ void read_file(osmpbf::OSMFileIn* in,
                unordered_map<int64_t,RoutingWay>* all_ways)
 {
     using namespace osmpbf;
-    cerr << "FIRST STEP started: read nodes and ways from file" << endl;
 
     PrimitiveBlockInputAdaptor pbi;
+    StatusUpdater upd;
+    upd.start("read nodes and ways from file (kb)", in->totalSize() / 1024);
     while (in->parseNextBlock(pbi)) {
+        upd.absolute(in->dataPosition() / 1024);
         for (osmpbf::INodeStream node = pbi.getNodeStream(); !node.isNull(); node.next()) {
             all_nodes->insert({node.id(), RoutingNode(-1, node.lond(), node.latd())});
         }
@@ -236,8 +287,9 @@ void read_file(osmpbf::OSMFileIn* in,
             all_ways->insert({way.id(), {one_way, v}});
         }
     }
+    upd.finish();
 
-    cerr << "FIRST STEP finished: all_nodes:" << all_nodes->size()
+    cerr << "all_nodes:" << all_nodes->size()
          << " all_ways:" << all_ways->size() << endl;
 }
 
@@ -284,16 +336,17 @@ void feed_node_mapper(const unordered_map<int64_t,RoutingNode>& all_nodes,
     cerr << "THIRD STEP started: retrieve detailed information about important nodes" << endl;
     for (const auto& node_id : nodes_used) {
         const RoutingNode& node = all_nodes.at(node_id);
-        latMinMax->feed(node.lat());
         lonMinMax->feed(node.lon());
+        latMinMax->feed(node.lat());
         nodeMapper->insert(node_id, node.lon(), node.lat());
     }
 }
 
-void generate_ddsg(const string& ddsg_fn,
-                   const unordered_map<int64_t,RoutingWay>& all_ways,
-                   const unordered_set<int64_t>& valid_ways,
-                   const NodeMapper& node_mapper)
+static void
+generate_ddsg(const string& ddsg_fn,
+              const unordered_map<int64_t,RoutingWay>& all_ways,
+              const unordered_set<int64_t>& valid_ways,
+              const NodeMapper& node_mapper)
 {
     using namespace osmpbf;
     cerr << "FOURTH STEP: create the ddsg graph" << endl;
@@ -304,8 +357,11 @@ void generate_ddsg(const string& ddsg_fn,
         exit(1);
     }
 
+    StatusUpdater upd;
+    upd.start("Generating the ddsg file", all_ways.size());
     RoutingGraphGenerator graphGenerator(ddsg);
     for (const auto& waykv : all_ways) {
+        upd.progress();
         int64_t way_id = waykv.first;
         if (valid_ways.count(way_id) == 0) {
             continue;
@@ -321,14 +377,141 @@ void generate_ddsg(const string& ddsg_fn,
         }
     }
     graphGenerator.finish(node_mapper.nodes_count());
+    upd.finish();
 
     cerr << "FOURTH STEP finished: Total edges:" << graphGenerator.edges() << endl;
+}
+
+static void
+exec_sql(sqlite3* db, const char* sql) {
+    char *errmsg;
+    sqlite3_exec(db, sql, NULL, NULL, &errmsg);
+    if (errmsg) {
+        cerr << "Error executing '" << sql << ": " << errmsg << endl;
+        sqlite3_free(errmsg);
+    }
+}
+
+static void
+insert_coords(sqlite3* db,
+              const NodeMapper& node_mapper,
+              const MinMax& lon_min_max,
+              const MinMax& lat_min_max)
+{
+    sqlite3_stmt *stmt;
+    int errc = sqlite3_prepare_v2(db, "INSERT INTO coords VALUES(?1,?2,?2,?3,?3)", -1, &stmt, NULL);
+    if (stmt == NULL) {
+        cerr << "Error preparing statement: insert_coords: " << errc << endl;
+        return;
+    }
+
+    StatusUpdater upd;
+    upd.start("inserting coords into the r-tree table", node_mapper.nodes_count());
+    for (const auto& it : node_mapper) {
+        const RoutingNode& routingNode = it.second;
+
+        sqlite3_bind_int(stmt, 1, routingNode.mapped_id());
+        sqlite3_bind_int(stmt, 2, lon_min_max.encode(routingNode.lon()));
+        sqlite3_bind_int(stmt, 3, lat_min_max.encode(routingNode.lat()));
+        sqlite3_step(stmt);
+        sqlite3_reset(stmt);
+
+        upd.progress();
+    }
+    sqlite3_finalize(stmt);
+    upd.finish();
+}
+
+static void
+insert_nodes_map(sqlite3* db, const NodeMapper& node_mapper) {
+    sqlite3_stmt *stmt;
+    int errc = sqlite3_prepare_v2(db, "INSERT INTO nodes_map VALUES(?1,?2)", -1, &stmt, NULL);
+    if (stmt == NULL) {
+        cerr << "Error preparing statement insert_nodes_map: " << errc << endl;
+        return;
+    }
+    StatusUpdater upd;
+    upd.start("inserting data into the nodes-map table", node_mapper.nodes_count());
+    for (const auto& it : node_mapper) {
+        const RoutingNode& routingNode = it.second;
+
+        sqlite3_bind_int64(stmt, 1, it.first);
+        sqlite3_bind_int(stmt, 2, routingNode.mapped_id());
+        sqlite3_step(stmt);
+        sqlite3_reset(stmt);
+
+        upd.progress();
+    }
+    sqlite3_finalize(stmt);
+    upd.finish();
+
+}
+
+static void
+insert_param(sqlite3_stmt *stmt, const char* key, double val) {
+    // in sqlite we can store anything we want. it's very flexible
+    sqlite3_bind_text(stmt, 1, key, -1, SQLITE_STATIC);
+    sqlite3_bind_double(stmt, 2, val);
+    sqlite3_step(stmt);
+    sqlite3_reset(stmt);
+}
+
+
+static void
+insert_params(sqlite3* db,
+              const MinMax& lon_min_max,
+              const MinMax& lat_min_max) {
+
+    sqlite3_stmt *stmt;
+    int errc = sqlite3_prepare_v2(db, "INSERT INTO params VALUES(?1,?2)", -1, &stmt, NULL);
+    if (stmt == NULL) {
+        cerr << "Error preparing statement insert_nodes_map: " << errc << endl;
+        return;
+    }
+
+    insert_param(stmt, "m", m);
+    insert_param(stmt, "granularity", granularity);
+    insert_param(stmt, "lon_min", lon_min_max.min());
+    insert_param(stmt, "lon_max", lon_min_max.max());
+    insert_param(stmt, "lat_min", lat_min_max.min());
+    insert_param(stmt, "lat_max", lat_min_max.max());
+
+    sqlite3_finalize(stmt);
+}
+
+static void
+save_nodes_db(const string& fn,
+              const NodeMapper& node_mapper,
+              const MinMax& lon_min_max,
+              const MinMax& lat_min_max)
+{
+    // delete any old db
+    unlink(fn.c_str());
+    sqlite3 * db;
+
+    sqlite3_open(fn.c_str(), &db);
+    exec_sql(db, "PRAGMA synchronous = OFF");
+    exec_sql(db, "PRAGMA journal_mode = OFF");
+
+    exec_sql(db, "BEGIN TRANSACTION");
+    exec_sql(db, "CREATE VIRTUAL TABLE coords USING rtree_i32(id,ilon,alon,ilat,alat)");
+    exec_sql(db, "CREATE TABLE nodes_map(old_id,new_id)");
+    exec_sql(db, "CREATE TABLE params(key, value)");
+
+    insert_coords(db, node_mapper, lon_min_max, lat_min_max);
+    insert_nodes_map(db, node_mapper);
+    insert_params(db, lon_min_max, lat_min_max);
+
+    exec_sql(db, "END TRANSACTION");
+    sqlite3_close(db);
+
 }
 
 int main(int argc, char ** argv) {
     using namespace osmpbf;
     if (argc < 4) {
-        cerr << "usage:" << argv[0] << "<in> <out-nodes> <out-ddsg>" << endl;
+        cerr << "usage: " << argv[0] << " <in> <out-nodes> <out-ddsg>" << endl;
+        return 1;
     }
 
     string input_fn(argv[1]);
@@ -361,28 +544,10 @@ int main(int argc, char ** argv) {
     lonMinMax.calc_offset();
     latMinMax.calc_offset();
 
-    protos::ch::NodesGraph nodesGraph;
-    nodesGraph.set_lon_offset(lonMinMax.offset());
-    nodesGraph.set_lat_offset(latMinMax.offset());
-    for (const auto& it : node_mapper) {
-        const RoutingNode& routingNode = it.second;
-        nodesGraph.add_old_ids(it.first);
-        nodesGraph.add_new_ids(routingNode.mapped_id());
-        nodesGraph.add_lons(lonMinMax.encode(routingNode.lon()));
-        nodesGraph.add_lats(latMinMax.encode(routingNode.lat()));
+    cerr << "Creating nodes file: " << nodes_fn << endl;
+    save_nodes_db(nodes_fn, node_mapper, lonMinMax, latMinMax);
 
-    }
-
-    // Write nodes
-    fstream nodes(nodes_fn, std::ios::out | std::ios::trunc | std::ios::binary);
-    if (!nodesGraph.SerializeToOstream(&nodes)) {
-        std::cerr << "Failed to open " << nodes_fn << endl;
-        return -1;
-    }
-    nodes.close();
-
-
-    cerr << "Convertion process finished successfully" << endl;
+    cerr << "Conversion process finished successfully" << endl;
     
     return 0;
 }
