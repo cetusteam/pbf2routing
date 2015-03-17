@@ -495,14 +495,17 @@ save_nodes_db(const string& fn,
 
     exec_sql(db, "BEGIN TRANSACTION");
     exec_sql(db, "CREATE VIRTUAL TABLE coords USING rtree_i32(id,ilon,alon,ilat,alat)");
-    exec_sql(db, "CREATE TABLE nodes_map(old_id,new_id)");
+    exec_sql(db, "CREATE TABLE nodes_map(old_id INTEGER PRIMARY KEY ASC, new_id) WITHOUT ROWID");
     exec_sql(db, "CREATE TABLE params(key, value)");
 
     insert_coords(db, node_mapper, lon_min_max, lat_min_max);
     insert_nodes_map(db, node_mapper);
     insert_params(db, lon_min_max, lat_min_max);
 
+    cerr << "Creating index on nodes_map" << endl;
+    exec_sql(db, "CREATE UNIQUE INDEX idx_rev_nodes_map ON nodes_map(new_id)");
     exec_sql(db, "END TRANSACTION");
+
     sqlite3_close(db);
 
 }
