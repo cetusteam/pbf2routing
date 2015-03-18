@@ -1,7 +1,25 @@
-# MAP_FILE=maps/delaware-latest.osm.pbf
-MAP_FILE=maps/monaco-latest.osm.pbf
+INPUT=maps/monaco-latest.osm.pbf
 
-./build/osmpbf2graph/Debug/pbf2route \
-    $MAP_FILE \
-    out-nodes.pb.bin \
-    out-graph.txt
+MODE=debug
+if [ ${#@} -eq 0 ]; then
+    :
+elif [ ${#@} -eq 1 ]; then
+    INPUT=$1
+elif [ ${#@} -eq 2 ]; then
+    INPUT=$1
+    MODE=$2
+else
+    echo "usage $0 [map.osm.pbf [debug|release]]"
+    exit 1
+fi
+
+if [[ $MODE != "debug" && $MODE != "release" ]]; then
+    echo "error: mode $MODE must be debug or release. invalid: $MODE"
+    exit 1
+fi
+
+echo "Generating graph: input $INPUT in $MODE"
+
+./$MODE/pbf2routing/pbf2routing $INPUT $INPUT.sqlite.db $INPUT.ddsg
+
+echo "Execution finished:$INPUT outputs:$TMP"
