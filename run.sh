@@ -20,10 +20,6 @@ fi
 
 echo "Generating graph: input $INPUT in $MODE"
 
-
-CONVERTERS_PATH=./$MODE/converters
-SOLVER_PATH=./$MODE/src
-
 ./$MODE/pbf2routing/pbf2routing $INPUT $INPUT.sqlite.db $INPUT.ddsg
 
-echo "Execution finished of:$INPUT outputs:$TMP"
+echo "Execution finished:$INPUT outputs:$TMP"
