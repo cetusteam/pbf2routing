@@ -241,7 +241,7 @@ private:
         if (it != nodeIdMapper.end()) {
             return it->second.mapped_id();
         }
-        return nodeIdMapper.size() + 1;
+        return nodeIdMapper.size();
     }
     map_type_t nodeIdMapper;
 };
