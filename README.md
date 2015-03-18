@@ -1,5 +1,5 @@
-osmpbf && pbf2routing
-=====================
+pbf2routing
+===========
 
 This is a simple C++ library to parse OpenStreetMap's PBF files and generate
 a ddsg file.
